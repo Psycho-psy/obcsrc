@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel - Student Support Fund</title>
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth.js"></script>
+</head>
+<body>
+  <header>
+    <img src="logo.jpeg" alt="Student Fund Logo" class="logo">
+    <h1>Admin Panel - Submitted Applications</h1>
+    <button id="logoutBtn" style="float:right;">Logout</button>
+  </header>
+
+  <main class="applications">
+    <section class="controls">
+      <h2>All Applications</h2>
+      <button id="generateLinkBtn">Generate Application Link</button>
+      <button id="exportCsvBtn">Export to CSV</button>
+      <p id="generatedLink" style="margin-top:1rem; font-weight:bold;"></p>
+
+      <!-- Filter/Search -->
+      <div style="margin-top:1rem;">
+        <label for="statusFilter">Filter by Status:</label>
+        <select id="statusFilter">
+          <option value="All">All</option>
+          <option value="Pending">Pending</option>
+          <option value="Accepted">Accepted</option>
+          <option value="Rejected">Rejected</option>
+        </select>
+
+        <label for="searchInput" style="margin-left:1rem;">Search by Student ID/Program/MoMo:</label>
+        <input type="text" id="searchInput" placeholder="Enter ID, Program or MoMo">
+      </div>
+    </section>
+
+    <section>
+      <table>
+        <thead>
+          <tr>
+            <th>Full Name</th>
+            <th>Student ID</th>
+            <th>Program</th>
+            <th>Amount Requested</th>
+            <th>MoMo Number</th>
+            <th>Reason</th>
+            <th>Date Submitted</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="applicationsTable">
+          <!-- Rows populated dynamically -->
+        </tbody>
+      </table>
+      <p id="noDataMessage" style="display:none; text-align:center; margin-top:1rem; font-weight:bold;">
+        No applications found.
+      </p>
+    </section>
+  </main>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js";
+    import { getDatabase, ref, onValue, update, set } 
+      from "https://www.gstatic.com/firebasejs/9.6.10/firebase-database.js";
+    import { getAuth, onAuthStateChanged, signOut } 
+      from "https://www.gstatic.com/firebasejs/9.6.10/firebase-auth.js";
+
+    // Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyC8ZiEuC0EWgLwn47qMUgyE-bdrOTzBm3c",
+      authDomain: "knustobc-src.firebaseapp.com",
+      databaseURL: "https://knustobc-src-default-rtdb.firebaseio.com",
+      projectId: "knustobc-src",
+      storageBucket: "knustobc-src.firebasestorage.app",
+      messagingSenderId: "719112734540",
+      appId: "1:719112734540:web:5580eb9c92aa31089b31e9"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const auth = getAuth(app);
+
+    // Protect admin page
+    onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        window.location.href = "login.html"; // redirect if not logged in
+      }
+    });
+
+    // Logout
+    document.getElementById("logoutBtn").addEventListener("click", async () => {
+      await signOut(auth);
+      window.location.href = "login.html"; // redirect to login.html
+    });
+
+    let applications = [];
+
+    function renderApplications() {
+      const tbody = document.getElementById("applicationsTable");
+      const noDataMessage = document.getElementById("noDataMessage");
+      const statusFilter = document.getElementById("statusFilter").value;
+      const searchTerm = document.getElementById("searchInput").value.toLowerCase();
+
+      tbody.innerHTML = "";
+      let visibleCount = 0;
+
+      applications.forEach(app => {
+        const status = app.status || "Pending";
+        const submittedAt = app.submittedAt 
+          ? new Date(app.submittedAt).toLocaleDateString() 
+          : "";
+
+        const matchesStatus = (statusFilter === "All" || status === statusFilter);
+        const matchesSearch = (
+          (app.studentId && app.studentId.toLowerCase().includes(searchTerm)) ||
+          (app.program && app.program.toLowerCase().includes(searchTerm)) ||
+          (app.momo && app.momo.toLowerCase().includes(searchTerm))
+        );
+
+        if (matchesStatus && (searchTerm === "" || matchesSearch)) {
+          visibleCount++;
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${app.name || ""}</td>
+            <td>${app.studentId || ""}</td>
+            <td>${app.program || ""}</td>
+            <td>${app.amount || ""}</td>
+            <td>${app.momo || ""}</td>
+            <td>${app.reason || ""}</td>
+            <td>${submittedAt}</td>
+            <td><span class="status ${status.toLowerCase()}">${status}</span></td>
+            <td>
+              <button class="accept-btn" onclick="updateStatus('${app.id}', 'Accepted')">Accept</button>
+              <button class="reject-btn" onclick="updateStatus('${app.id}', 'Rejected')">Reject</button>
+            </td>
+          `;
+          tbody.appendChild(row);
+        }
+      });
+
+      noDataMessage.style.display = visibleCount === 0 ? "block" : "none";
+    }
+
+    async function checkDuplicates() {
+      const seenStudent = {};
+      const seenMomo = {};
+
+      for (let app of applications) {
+        const submittedDate = new Date(app.submittedAt);
+        const monthYear = `${submittedDate.getMonth()}-${submittedDate.getFullYear()}`;
+
+        const studentKey = `${app.studentId}-${monthYear}`;
+        const momoKey = `${app.momo}-${monthYear}`;
+
+        if (seenStudent[studentKey]) {
+          await update(ref(db, "applications/" + app.id), { status: "Rejected" });
+          app.status = "Rejected";
+          await update(ref(db, "applications/" + seenStudent[studentKey].id), { status: "Rejected" });
+          seenStudent[studentKey].status = "Rejected";
+        } else {
+          seenStudent[studentKey] = app;
+        }
+
+        if (seenMomo[momoKey]) {
+          await update(ref(db, "applications/" + app.id), { status: "Rejected" });
+          app.status = "Rejected";
+          await update(ref(db, "applications/" + seenMomo[momoKey].id), { status: "Rejected" });
+          seenMomo[momoKey].status = "Rejected";
+        } else {
+          seenMomo[momoKey] = app;
+        }
+      }
+    }
+
+    function loadApplications() {
+      const appsRef = ref(db, "applications");
+      onValue(appsRef, async (snapshot) => {
+        applications = [];
+        snapshot.forEach((childSnap) => {
+          applications.push({ id: childSnap.key, ...childSnap.val() });
+        });
+        await checkDuplicates();
+        renderApplications();
+      });
+    }
+
+    window.updateStatus = async function(id, status) {
+      const appRef = ref(db, "applications/" + id);
+      await update(appRef, { status });
+      alert(`Application ${status}`);
+    };
+
+    // Generate unique link with 3-day expiry
+    document.getElementById("generateLinkBtn").addEventListener("click", async function() {
+      const token = Math.random().toString(36).substring(2, 10);
+      const createdAt = new Date();
+      const expiresAt = new Date();
+      expiresAt.setDate(createdAt.getDate() + 3);
+
+      await set(ref(db, "tokens/" + token), {
+        createdAt: createdAt.toISOString(),
+        expiresAt: expiresAt.toISOString()
+      });
+
+            // ✅ Token now points to landing.html
+      const link = `landing.html?token=${token}`;
+      document.getElementById("generatedLink").innerHTML = 
+        `Generated Link: <a href="${link}" target="_blank">${link}</a> (valid until ${expiresAt.toDateString()})`;
+    });
+
+    // Export to CSV
+    function exportToCSV() {
+      let csvContent = "data:text/csv;charset=utf-8,"
+        + ["Full Name","Student ID","Program","Amount Requested","MoMo Number","Reason","Date Submitted","Status"].join(",") + "\n";
+
+      const statusFilter = document.getElementById("statusFilter").value;
+      const searchTerm = document.getElementById("searchInput").value.toLowerCase();
+
+      applications.forEach(app => {
+        const status = app.status || "Pending";
+        const submittedAt = app.submittedAt 
+          ? new Date(app.submittedAt).toLocaleDateString() 
+          : "";
+
+        const matchesStatus = (statusFilter === "All" || status === statusFilter);
+        const matchesSearch = (
+          (app.studentId && app.studentId.toLowerCase().includes(searchTerm)) ||
+          (app.program && app.program.toLowerCase().includes(searchTerm)) ||
+          (app.momo && app.momo.toLowerCase().includes(searchTerm))
+        );
+
+        if (matchesStatus && (searchTerm === "" || matchesSearch)) {
+          const row = [
+            app.name || "",
+            app.studentId || "",
+            app.program || "",
+            app.amount || "",
+            app.momo || "",
+            (app.reason || "").replace(/[\r\n]+/g, " "),
+            submittedAt,
+            status
+          ];
+          csvContent += row.map(field => `"${String(field).replace(/"/g, '""')}"`).join(",") + "\n";
+        }
+      });
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      const timestamp = new Date().toISOString().split("T")[0];
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `applications_${timestamp}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    document.getElementById("exportCsvBtn").addEventListener("click", exportToCSV);
+
+    // Filter/Search listeners
+    document.getElementById("statusFilter").addEventListener("change", renderApplications);
+    document.getElementById("searchInput").addEventListener("input", renderApplications);
+
+    // Initial load
+    loadApplications();
+  </script>
+</body>
+</html>

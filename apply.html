@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Apply for Funds</title>
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database.js"></script>
+</head>
+<body>
+  <header>
+    <img src="logo.jpeg" alt="Student Fund Logo" class="logo">
+    <h1>Student Fund Application</h1>
+  </header>
+
+  <main>
+    <form id="applicationForm" class="form-container">
+      <h2>Application Form</h2>
+
+      <label for="name">Full Name</label>
+      <input type="text" id="name" name="name" required>
+
+      <label for="studentId">Student ID</label>
+      <input type="text" id="studentId" name="studentId" required>
+
+      <label for="program">Program</label>
+      <input type="text" id="program" name="program" required>
+
+      <label for="amount">Amount Requested</label>
+      <input type="number" id="amount" name="amount" required>
+
+      <label for="reason">Reason</label>
+      <textarea id="reason" name="reason" rows="4" required></textarea>
+
+      <label for="momo">MoMo Number</label>
+      <input type="text" id="momo" name="momo" pattern="\d{10}" maxlength="10" required>
+      <small>Enter a 10-digit mobile money number</small>
+
+      <button type="submit">Submit Application</button>
+      <p id="successMessage" class="success-message" style="display:none;">
+        Application submitted successfully!
+      </p>
+    </form>
+  </main>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js";
+    import { getDatabase, ref, push } 
+      from "https://www.gstatic.com/firebasejs/9.6.10/firebase-database.js";
+
+    // Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyC8ZiEuC0EWgLwn47qMUgyE-bdrOTzBm3c",
+      authDomain: "knustobc-src.firebaseapp.com",
+      databaseURL: "https://knustobc-src-default-rtdb.firebaseio.com",
+      projectId: "knustobc-src",
+      storageBucket: "knustobc-src.firebasestorage.app",
+      messagingSenderId: "719112734540",
+      appId: "1:719112734540:web:5580eb9c92aa31089b31e9"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // Retrieve token stored in landing.html
+    const token = localStorage.getItem("applicationToken");
+
+    if (!token) {
+      alert("No valid access token found. Please start from the landing page link provided by admin.");
+      document.getElementById("applicationForm").style.display = "none";
+    }
+
+    // Handle form submission
+    document.getElementById("applicationForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const momo = document.getElementById("momo").value;
+
+      // Validate MoMo number
+      if (!/^\d{10}$/.test(momo)) {
+        alert("MoMo number must be exactly 10 digits.");
+        return;
+      }
+
+      const data = {
+        name: document.getElementById("name").value,
+        studentId: document.getElementById("studentId").value,
+        program: document.getElementById("program").value,
+        amount: document.getElementById("amount").value,
+        reason: document.getElementById("reason").value,
+        momo: momo,
+        status: "Pending",
+        submittedAt: new Date().toISOString(),
+        token: token // ✅ attach token to submission
+      };
+
+      try {
+        await push(ref(db, "applications"), data);
+        document.getElementById("successMessage").style.display = "block";
+        e.target.reset();
+      } catch (error) {
+        console.error("Error submitting application:", error);
+        alert("There was an error submitting your application. Please try again.");
+      }
+    });
+  </script>
+</body>
+</html>

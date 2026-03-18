@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin Login</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <h1>Admin Login</h1>
+    <form id="loginForm">
+      <!-- Use email instead of username -->
+      <input type="email" id="email" placeholder="Admin Email" required>
+      <input type="password" id="password" placeholder="Password" required>
+      <button type="submit">Login</button>
+    </form>
+  </main>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-auth.js";
+
+    // Firebase config (same as index.html)
+    const firebaseConfig = {
+      apiKey: "AIzaSyC8ZiEuC0EWgLwn47qMUgyE-bdrOTzBm3c",
+      authDomain: "knustobc-src.firebaseapp.com",
+      projectId: "knustobc-src",
+      storageBucket: "knustobc-src.firebasestorage.app",
+      messagingSenderId: "719112734540",
+      appId: "1:719112734540:web:5580eb9c92aa31089b31e9"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+
+    document.getElementById("loginForm").onsubmit = async e => {
+      e.preventDefault();
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+        alert("Login successful!");
+        // ✅ Redirect to index.html (admin panel)
+        window.location.href = "index.html";
+      } catch (error) {
+        console.error(error);
+        alert("Login failed. Please check your credentials.");
+      }
+    };
+  </script>
+</body>
+</html>
